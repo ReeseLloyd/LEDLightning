@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEDLightning v1.3</title>
+<title>LEDLightning v1.4</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -50,7 +50,6 @@ header h1 span {
   overflow: hidden;
 }
 
-/* ── Sidebar ── */
 .sidebar {
   width: 240px;
   min-width: 240px;
@@ -146,7 +145,6 @@ button:hover {
   padding-top: 0.5rem;
 }
 
-/* ── View pane ── */
 .view-pane {
   flex: 1;
   display: flex;
@@ -209,7 +207,7 @@ canvas {
       </select>
     </div>
 
-    <div class="version">v1.3</div>
+    <div class="version">v1.4</div>
 
   </aside>
 
@@ -266,22 +264,230 @@ function valueNoise(rng, n) {
   };
 }
 
-// --- Silhouette shapes (rows: top→bottom, 'X'=lit, '.'=empty) ---
-// Max ~8×8 cells each. Placed on the static ground at scene generation.
-const SILHOUETTE_TYPES = [
-  { rows: ['..X..','..X..','..X..','..X..','..X..','..X..','..X..','..X..'] },          // 0: rain / placeholder -- excluded below; replaced by:
-  { rows: ['..X..', '.XXX.', 'XXXXX', '..X..', '..X..', '..X..', '..X..'] },           // 1: pine tree
-  { rows: ['.XXXX.', 'XXXXXX', 'XXXXXX', '.XXXX.', '..XX..', '..XX..', '..XX..'] },    // 2: round tree
-  { rows: ['..X..', '.XXX.', 'XXXXX', 'XXXXX', 'XXXXX'] },                              // 3: house
-  { rows: ['...X...', '..XXX..', '.XXXXX.', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX'] },         // 4: barn
-  { rows: ['.XXX.', 'XXXXX', '.XXX.'] },                                                 // 5: rock
-  { rows: ['.XXX.', 'XXXXX', 'XXXXX'] },                                                 // 6: bush
-  { rows: ['XXX', '.X.', '.X.', '.X.', '.X.', '.X.', 'XXX'] },                         // 7: lamp post
-].slice(1);  // drop index 0 placeholder
+// ── Silhouette generators ──────────────────────────────────────────────────
+// Each takes an rng and returns { rows: string[], baseColor: [r,g,b] }.
+// Rows run top→bottom; 'X' = lit pixel, '.' = empty. All rows in a shape
+// must be the same length. Max size is roughly 8×8 cells.
 
-// --- Palettes ---
-// Index 5 is Mixed: bolts pick from indices 0-4 individually.
-// cloud/cloudHi/flash on Mixed are used for base cloud/ground rendering.
+function genPine(rng) {
+  const numLayers = 2 + Math.floor(rng() * 3);   // 2–4 canopy tiers
+  const trunkH    = 2 + Math.floor(rng() * 3);   // 2–4 trunk rows
+  const trunkW    = 1 + Math.floor(rng() * 2);   // 1 or 2 wide
+  const gridW     = 2 * numLayers + 1;            // 5, 7, or 9
+
+  const cx   = Math.floor(gridW / 2);
+  const rows = [];
+
+  for (let i = 0; i < numLayers; i++) {
+    // Symmetric ±1 edge wobble keeps the tree balanced but not stamped
+    const edgeMod = i > 0 ? Math.floor(rng() * 3) - 1 : 0;  // -1, 0, or +1
+    const lEdge   = Math.max(0,          cx - i - edgeMod);
+    const rEdge   = Math.min(gridW - 1,  cx + i + edgeMod);
+    const row     = Array(gridW).fill('.');
+    for (let c = lEdge; c <= rEdge; c++) row[c] = 'X';
+    rows.push(row.join(''));
+    // Occasionally repeat the widest tier for a chunkier canopy
+    if (i === numLayers - 1 && rng() > 0.5) rows.push(row.join(''));
+  }
+
+  // Trunk — centred, 1 or 2 wide
+  const tl    = cx - Math.floor(trunkW / 2);
+  const trunk = Array(gridW).fill('.');
+  for (let c = tl; c < tl + trunkW && c < gridW; c++) trunk[c] = 'X';
+  for (let i = 0; i < trunkH; i++) rows.push(trunk.join(''));
+
+  return { rows, baseColor: [35, 68, 42] };  // silver-green
+}
+
+function genRoundTree(rng) {
+  const canopyR = 2 + Math.floor(rng() * 2);              // radius 2–3 → 5 or 7 wide
+  const canopyH = canopyR + 1 + Math.floor(rng() * 2);    // slightly taller than wide
+  const trunkH  = 2 + Math.floor(rng() * 3);              // 2–4 rows
+  const trunkW  = 1 + Math.floor(rng() * 2);              // 1–2 wide
+  const gridW   = 2 * canopyR + 1;
+  const cx      = canopyR;
+  const rows    = [];
+
+  for (let row = 0; row < canopyH; row++) {
+    const t   = (2 * row / (canopyH - 1)) - 1;  // −1..+1
+    const hw  = Math.max(1, Math.round(canopyR * Math.sqrt(Math.max(0, 1 - t * t))));
+    // Independent left/right edge noise for an organic, asymmetric crown
+    const lMod   = Math.floor(rng() * 3) - 1;
+    const rMod   = Math.floor(rng() * 3) - 1;
+    const lEdge  = Math.max(0,          cx - hw + lMod);
+    const rEdge  = Math.min(gridW - 1,  cx + hw + rMod);
+    const r      = Array(gridW).fill('.');
+    for (let c = lEdge; c <= rEdge; c++) r[c] = 'X';
+    rows.push(r.join(''));
+  }
+
+  const tl    = cx - Math.floor(trunkW / 2);
+  const trunk = Array(gridW).fill('.');
+  for (let c = tl; c < tl + trunkW && c < gridW; c++) trunk[c] = 'X';
+  for (let i = 0; i < trunkH; i++) rows.push(trunk.join(''));
+
+  return { rows, baseColor: [10, 48, 16] };  // dark green
+}
+
+function genHouse(rng) {
+  const bodyW      = 4 + Math.floor(rng() * 4);   // 4–7 wide
+  const bodyH      = 2 + Math.floor(rng() * 3);   // 2–4 storeys
+  const hasChimney = rng() > 0.4;
+  const chimSide   = Math.floor(rng() * 2);        // 0=left, 1=right
+  const chimTall   = rng() > 0.5 ? 2 : 1;         // 1 or 2 rows
+  const cxL        = Math.floor((bodyW - 1) / 2);
+  const cxR        = Math.ceil ((bodyW - 1) / 2);
+  const rows       = [];
+
+  // Optional chimney above the roof peak
+  if (hasChimney) {
+    const cr = Array(bodyW).fill('.');
+    cr[chimSide === 0 ? 1 : bodyW - 2] = 'X';
+    for (let i = 0; i < chimTall; i++) rows.push(cr.join(''));
+  }
+
+  // Peaked roof — expands 1 cell per row from centre outward
+  const roofRows = Math.ceil(bodyW / 2);
+  for (let i = 0; i < roofRows; i++) {
+    const lEdge = Math.max(0,          cxL - i);
+    const rEdge = Math.min(bodyW - 1,  cxR + i);
+    const row   = Array(bodyW).fill('.');
+    for (let c = lEdge; c <= rEdge; c++) row[c] = 'X';
+    rows.push(row.join(''));
+    if (lEdge === 0) break;
+  }
+
+  const bodyRow = Array(bodyW).fill('X').join('');
+  for (let i = 0; i < bodyH; i++) rows.push(bodyRow);
+
+  return { rows, baseColor: [58, 53, 14] };  // dim yellow
+}
+
+function genBarn(rng) {
+  const bodyW     = 5 + Math.floor(rng() * 4);   // 5–8 wide
+  const bodyH     = 2 + Math.floor(rng() * 3);   // 2–4 rows
+  const isGambrel = rng() > 0.5;
+  const cxL       = Math.floor((bodyW - 1) / 2);
+  const cxR       = Math.ceil ((bodyW - 1) / 2);
+  const rows      = [];
+
+  if (isGambrel) {
+    // Gambrel: wide peak (2–3 cells) that jumps quickly to near-full width
+    const peakW = 2 + Math.floor(rng() * 2);
+    for (const pw of [peakW, bodyW - 2, bodyW]) {
+      const lEdge = Math.max(0,          cxL - Math.floor((pw - 1) / 2));
+      const rEdge = Math.min(bodyW - 1,  cxR + Math.ceil ((pw - 1) / 2));
+      const row   = Array(bodyW).fill('.');
+      for (let c = lEdge; c <= rEdge; c++) row[c] = 'X';
+      rows.push(row.join(''));
+    }
+  } else {
+    // Simple peaked roof (same logic as house)
+    const roofRows = Math.ceil(bodyW / 2);
+    for (let i = 0; i < roofRows; i++) {
+      const lEdge = Math.max(0,          cxL - i);
+      const rEdge = Math.min(bodyW - 1,  cxR + i);
+      const row   = Array(bodyW).fill('.');
+      for (let c = lEdge; c <= rEdge; c++) row[c] = 'X';
+      rows.push(row.join(''));
+      if (lEdge === 0) break;
+    }
+  }
+
+  const bodyRow = Array(bodyW).fill('X').join('');
+  for (let i = 0; i < bodyH; i++) rows.push(bodyRow);
+
+  return { rows, baseColor: [62, 16, 16] };  // dim red
+}
+
+function genRock(rng) {
+  const maxW = 3 + Math.floor(rng() * 5);   // 3–7 wide
+  const maxH = 2 + Math.floor(rng() * 3);   // 2–4 tall
+  const cx   = (maxW - 1) / 2;
+  const rows = [];
+
+  for (let row = 0; row < maxH; row++) {
+    const isTop = row === 0;
+    const isBtm = row === maxH - 1;
+    // Profile: narrow at top (~40 %), wide at bottom (~88 %) — like a resting boulder
+    const hwF   = isTop ? 0.40 : isBtm ? 0.88 : 0.62 + rng() * 0.30;
+    const hw    = (maxW / 2) * hwF;
+    // Independent left/right edge noise for organic silhouette
+    const lMod  = Math.floor(rng() * 3) - 1;
+    const rMod  = Math.floor(rng() * 3) - 1;
+    const lEdge = Math.max(0,          Math.round(cx - hw) + lMod);
+    const rEdge = Math.min(maxW - 1,   Math.round(cx + hw) + rMod);
+    const r     = Array(maxW).fill('.');
+    for (let c = lEdge; c <= rEdge; c++) r[c] = 'X';
+    rows.push(r.join(''));
+  }
+
+  return { rows, baseColor: [50, 52, 58] };  // dim grey
+}
+
+function genBush(rng) {
+  const numClusters = 1 + Math.floor(rng() * 3);   // 1–3 bumps at top
+  const baseW       = 3 + Math.floor(rng() * 4);   // 3–6 wide
+  const baseH       = 2 + Math.floor(rng() * 2);   // 2–3 base rows
+  const clusters    = [];
+
+  for (let i = 0; i < numClusters; i++) {
+    clusters.push({
+      cx: Math.floor(rng() * baseW),
+      cr: 1 + Math.floor(rng() * 2),  // cluster radius 1–2
+    });
+  }
+
+  const rows   = [];
+  const totalH = baseH + 2;  // 2 bump rows + base rows
+
+  for (let row = 0; row < totalH; row++) {
+    const rowArr = Array(baseW).fill('.');
+    if (row < 2) {
+      // Top rows: fill from cluster centres — row 0 is tighter (radius − 1)
+      for (const { cx, cr } of clusters) {
+        const hw = row === 0 ? Math.max(0, cr - 1) : cr;
+        for (let c = cx - hw; c <= cx + hw; c++)
+          if (c >= 0 && c < baseW) rowArr[c] = 'X';
+      }
+    } else {
+      // Base rows: mostly full with a slight edge taper
+      const lN = Math.floor(rng() * 2);   // 0–1
+      const rN = Math.floor(rng() * 2);
+      for (let c = lN; c < baseW - rN; c++) rowArr[c] = 'X';
+    }
+    rows.push(rowArr.join(''));
+  }
+
+  return { rows, baseColor: [20, 58, 17] };  // dim green
+}
+
+function genLampPost(rng) {
+  const poleH     = 3 + Math.floor(rng() * 4);   // 3–6 pole rows
+  const headStyle = Math.floor(rng() * 3);         // 0: T, 1: L-left, 2: L-right
+  const hasBase   = rng() > 0.3;
+  const rows      = [];
+
+  // Head
+  if      (headStyle === 0) { rows.push('XXX'); }
+  else if (headStyle === 1) { rows.push('X..'); rows.push('XX.'); }
+  else                      { rows.push('..X'); rows.push('.XX'); }
+
+  // Pole
+  for (let i = 0; i < poleH; i++) rows.push('.X.');
+
+  // Base
+  rows.push(hasBase ? 'XXX' : '.X.');
+
+  return { rows, baseColor: [28, 33, 42] };  // dim dark grey
+}
+
+const SILHOUETTE_GENERATORS = [
+  genPine, genRoundTree, genHouse, genBarn, genRock, genBush, genLampPost,
+];
+
+// ── Palettes ─────────────────────────────────────────────────────────────
+// Index 5 is Mixed: each bolt independently picks from 0–4.
 const PALETTES = [
   { name: 'Electric Blue',
     cloud: [50,55,75],   cloudHi: [80,90,120],
@@ -310,21 +516,20 @@ const PALETTES = [
 ];
 const MIXED_IDX = 5;
 
-// --- Scene state ---
+// ── Scene state ───────────────────────────────────────────────────────────
 let cloudNoise1, cloudNoise2, cloudBase;
 const CLOUD_MIN = 4, CLOUD_MAX = 10;
 
 let groundNoise1, groundNoise2, groundBase;
-let groundTopStatic;  // precomputed static ground height per column
+let groundTopStatic;
 const GROUND_TOP = 88, GROUND_RANGE = 8;
 
-let sceneObjects = [];  // silhouette objects placed on terrain
+let sceneObjects = [];
 let bolts        = [];
-let strikeMarks  = [];  // afterglow marks left by ground strikes
-const STRIKE_LIFE = 120;  // frames (~2 s at 60 fps)
+let strikeMarks  = [];
+const STRIKE_LIFE = 120;
 let time = 0, boltRng, nextBoltTime = 0;
 
-// --- Seed helpers ---
 const MAX_SEED = 2147483647;
 
 function getSeed() {
@@ -336,7 +541,7 @@ function getSeed() {
   return v;
 }
 
-// --- Generate scene from seed ---
+// ── Generate scene ─────────────────────────────────────────────────────────
 function generateScene() {
   const seed = getSeed();
   const rng  = makeRng(seed);
@@ -351,7 +556,7 @@ function generateScene() {
   groundBase   = new Float32Array(W);
   for (let x = 0; x < W; x++) groundBase[x] = 0.4 + rng() * 0.3;
 
-  // Precompute static ground height per column (no animation)
+  // Static ground height per column
   groundTopStatic = new Float32Array(W);
   for (let x = 0; x < W; x++) {
     const n1 = groundNoise1((x / W) * 10);
@@ -359,23 +564,25 @@ function generateScene() {
     groundTopStatic[x] = GROUND_TOP + (n1 + n2) * GROUND_RANGE;
   }
 
-  // Place silhouette objects on the terrain using a separate RNG stream
+  // Place procedurally generated silhouette objects
   const objRng = makeRng(seed + 4567);
   sceneObjects  = [];
-  const numObj  = 3 + Math.floor(objRng() * 5);  // 3–7 objects per scene
-  const used    = [];  // reserved x-ranges to prevent overlap
+  const numObj  = 3 + Math.floor(objRng() * 5);   // 3–7 objects
+  const used    = [];
+
   for (let attempt = 0; sceneObjects.length < numObj && attempt < numObj * 8; attempt++) {
-    const type  = SILHOUETTE_TYPES[Math.floor(objRng() * SILHOUETTE_TYPES.length)];
-    const w     = type.rows[0].length;
-    const h     = type.rows.length;
-    const cx    = 8 + Math.floor(objRng() * (W - 16));
-    const baseX = cx - Math.floor(w / 2);
-    const baseY = Math.round(groundTopStatic[Math.min(W - 1, cx)]) - h;
+    const genFn    = SILHOUETTE_GENERATORS[Math.floor(objRng() * SILHOUETTE_GENERATORS.length)];
+    const generated = genFn(objRng);  // calls generator, consuming its RNG
+    const w         = generated.rows[0].length;
+    const h         = generated.rows.length;
+    const cx        = 8 + Math.floor(objRng() * (W - 16));
+    const baseX     = cx - Math.floor(w / 2);
+    const baseY     = Math.round(groundTopStatic[Math.min(W - 1, cx)]) - h;
     if (baseX < 1 || baseX + w > W - 1 || baseY < 2) continue;
     const lo = baseX - 2, hi = baseX + w + 2;
     if (used.some(r => lo < r.hi && hi > r.lo)) continue;
     used.push({ lo, hi });
-    sceneObjects.push({ type, baseX, baseY });
+    sceneObjects.push({ rows: generated.rows, baseColor: generated.baseColor, baseX, baseY });
   }
 
   strikeMarks  = [];
@@ -385,7 +592,7 @@ function generateScene() {
   nextBoltTime = 30 + Math.floor(boltRng() * 60);
 }
 
-// --- Scene geometry ---
+// ── Scene geometry ─────────────────────────────────────────────────────────
 function groundTop(x) {
   return groundTopStatic[Math.min(W - 1, Math.max(0, Math.floor(x)))];
 }
@@ -396,16 +603,16 @@ function cloudBottom(x, t) {
   return CLOUD_MIN + (n1 + n2) * (CLOUD_MAX - CLOUD_MIN);
 }
 
-// --- Spawn a bolt ---
+// ── Spawn bolt ─────────────────────────────────────────────────────────────
 function spawnBolt(rng, branchStr) {
-  const palIdx    = parseInt(document.getElementById('palIn').value) || 0;
-  const boltPal   = palIdx === MIXED_IDX
+  const palIdx  = parseInt(document.getElementById('palIn').value) || 0;
+  const boltPal = palIdx === MIXED_IDX
     ? PALETTES[Math.floor(rng() * 5)]
     : PALETTES[palIdx];
 
-  const sx        = Math.floor(10 + rng() * (W - 20));
-  const sy        = Math.floor(cloudBottom(sx, time));
-  const segments  = [];
+  const sx           = Math.floor(10 + rng() * (W - 20));
+  const sy           = Math.floor(cloudBottom(sx, time));
+  const segments     = [];
   const branchChance = 0.03 + branchStr * 0.09;
   let hitGround = false, hitX = sx;
 
@@ -415,7 +622,7 @@ function spawnBolt(rng, branchStr) {
       : Math.floor((8 + rng() * 25) * energy * (0.8 + branchStr * 0.4));
     let cx = x, cy = y;
     for (let i = 0; i < maxSteps; i++) {
-      const gnd = groundTop(cx);  // static — no time argument
+      const gnd = groundTop(cx);
       if (cy >= gnd) {
         if (depth === 0) { hitGround = true; hitX = cx; }
         break;
@@ -439,7 +646,7 @@ function spawnBolt(rng, branchStr) {
            sx, sy, hitGround, hitX, pal: boltPal, width: rng() };
 }
 
-// --- Pixel helpers ---
+// ── Pixel helpers ──────────────────────────────────────────────────────────
 function setPixel(x, y, r, g, b, a) {
   x = Math.floor(x); y = Math.floor(y);
   if (x < 0 || x >= W || y < 0 || y >= H) return;
@@ -460,14 +667,14 @@ function drawSegment(x0, y0, x1, y1, r, g, b, a) {
   }
 }
 
-// --- Bolt flash phase (fades over full bolt lifetime) ---
+// Flash envelope for ground/silhouettes — fades over full bolt lifetime
 function boltFlashPhase(age, life) {
-  if (age < 3) return 1.0;
-  if (age < 6) return 0.8;
+  if (age < 3)  return 1.0;
+  if (age < 6)  return 0.8;
   return Math.max(0, 0.5 * (1 - (age - 6) / Math.max(1, life - 6)));
 }
 
-// --- Render loop ---
+// ── Render loop ────────────────────────────────────────────────────────────
 function renderFrame() {
   const freq      = parseInt(document.getElementById('freqIn').value)   || 5;
   const branchStr = parseInt(document.getElementById('branchIn').value) / 5;
@@ -476,7 +683,7 @@ function renderFrame() {
 
   gridR.fill(0); gridG.fill(0); gridB.fill(0);
 
-  // ── Cloud layer ──
+  // ── Clouds ──
   for (let x = 0; x < W; x++) {
     const bottom = cloudBottom(x, time);
     for (let y = 0; y < Math.ceil(bottom); y++) {
@@ -508,9 +715,9 @@ function renderFrame() {
     }
   }
 
-  // ── Ground layer (static geometry, no shimmer) ──
+  // ── Ground (static) ──
   for (let x = 0; x < W; x++) {
-    const top = groundTopStatic[x];
+    const top   = groundTopStatic[x];
     for (let y = Math.floor(top); y < H; y++) {
       const depth = (y - top) / (H - top);
       const a     = (0.3 + 0.5 * (1 - depth)) * groundBase[x];
@@ -518,8 +725,8 @@ function renderFrame() {
       let gg = 50 + 80 * (1 - depth);
       let gb = 10 + 15 * (1 - depth);
 
-      // Flash from active bolts (fades over full bolt lifetime)
       let flashBoost = 0, fR = 0, fG = 0, fB = 0;
+
       for (const bolt of bolts) {
         if (!bolt.hitGround) continue;
         const age   = time - bolt.birth;
@@ -535,9 +742,8 @@ function renderFrame() {
         }
       }
 
-      // Afterglow from expired strike marks
       for (const mark of strikeMarks) {
-        const mAge     = time - mark.birth;
+        const mAge      = time - mark.birth;
         if (mAge >= STRIKE_LIFE) continue;
         const intensity = Math.pow(1 - mAge / STRIKE_LIFE, 2) * 0.45;
         const dist      = Math.abs(x - mark.x);
@@ -558,22 +764,23 @@ function renderFrame() {
     }
   }
 
-  // ── Silhouette objects (override ground/sky pixels with dark shapes) ──
+  // ── Silhouette objects ──
+  // Rendered after ground so they override it. Direct grid assignment (not additive).
   for (const obj of sceneObjects) {
-    const { type, baseX, baseY } = obj;
-    for (let row = 0; row < type.rows.length; row++) {
-      const py  = baseY + row;
+    const { rows, baseColor, baseX, baseY } = obj;
+    for (let row = 0; row < rows.length; row++) {
+      const py     = baseY + row;
       if (py < 0 || py >= H) continue;
-      const rowStr = type.rows[row];
+      const rowStr = rows[row];
       for (let col = 0; col < rowStr.length; col++) {
         if (rowStr[col] !== 'X') continue;
         const px = baseX + col;
         if (px < 0 || px >= W) continue;
 
-        // Very dark ambient base (barely visible silhouette in darkness)
-        let sr = 5, sg = 8, sb = 14;
+        // Start from the object's own dim base colour
+        let sr = baseColor[0], sg = baseColor[1], sb = baseColor[2];
 
-        // Illuminate from active bolts (whole scene flash)
+        // Brighten during active bolts (scene-wide flash)
         for (const bolt of bolts) {
           const age   = time - bolt.birth;
           if (age > bolt.life) continue;
@@ -590,7 +797,7 @@ function renderFrame() {
 
         // Afterglow from strike marks
         for (const mark of strikeMarks) {
-          const mAge     = time - mark.birth;
+          const mAge      = time - mark.birth;
           if (mAge >= STRIKE_LIFE) continue;
           const intensity = Math.pow(1 - mAge / STRIKE_LIFE, 2) * 0.3;
           const dist      = Math.abs(px - mark.x);
@@ -602,8 +809,7 @@ function renderFrame() {
           }
         }
 
-        // Direct write — silhouette overrides whatever ground/sky rendered here
-        const idx = py * W + px;
+        const idx  = py * W + px;
         gridR[idx] = sr;
         gridG[idx] = sg;
         gridB[idx] = sb;
@@ -626,7 +832,6 @@ function renderFrame() {
     const bolt = bolts[bi];
     const age  = time - bolt.birth;
     if (age > bolt.life) {
-      // Leave a strike mark afterglow where the bolt hit
       if (bolt.hitGround) strikeMarks.push({ x: bolt.hitX, pal: bolt.pal, birth: time });
       bolts.splice(bi, 1);
       continue;
@@ -658,8 +863,7 @@ function renderFrame() {
       drawSegment(seg.x0, seg.y0, seg.x1, seg.y1, r, g, b, a);
       if (a > 0.15) {
         const maxGlow    = seg.depth === 0 ? bolt.width
-                         : seg.depth === 1 ? bolt.width * 0.5
-                         : 0;
+                         : seg.depth === 1 ? bolt.width * 0.5 : 0;
         const glowRadius = Math.min(3, Math.floor(maxGlow * 4));
         for (let off = 1; off <= glowRadius; off++) {
           const ga = a * 0.3 * Math.pow(0.55, off - 1);
@@ -692,7 +896,6 @@ function renderFrame() {
   }
   ctx.putImageData(img, 0, 0);
 
-  // Expire old strike marks
   if (strikeMarks.length > 0)
     strikeMarks = strikeMarks.filter(m => (time - m.birth) < STRIKE_LIFE);
 
@@ -700,7 +903,7 @@ function renderFrame() {
   requestAnimationFrame(renderFrame);
 }
 
-// --- Canvas scaling (fit to view pane) ---
+// ── Canvas scaling ─────────────────────────────────────────────────────────
 const viewPane = document.getElementById('viewPane');
 function fitCanvas() {
   const scale = Math.min(
@@ -711,7 +914,7 @@ function fitCanvas() {
 }
 new ResizeObserver(fitCanvas).observe(viewPane);
 
-// --- Controls ---
+// ── Controls ───────────────────────────────────────────────────────────────
 function rebuild() { generateScene(); }
 
 document.getElementById('seedIn').addEventListener('change', rebuild);
@@ -729,7 +932,6 @@ document.getElementById('randBtn').addEventListener('click', () => {
   rebuild();
 });
 
-// Startup: random seed
 document.getElementById('seedIn').value = 1 + Math.floor(Math.random() * MAX_SEED);
 generateScene();
 renderFrame();
