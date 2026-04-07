@@ -1,5 +1,5 @@
 # LEDLightning — Documentation
-**Version 1.0**
+**Version 1.1**
 
 LEDLightning is a single-file, self-contained HTML application that simulates a procedural thunderstorm rendered as a glowing LED dot-matrix display. Storms are deterministic — any storm can be exactly reproduced from its seed and settings. No server, no build step, no dependencies, no installation required.
 
@@ -15,7 +15,7 @@ Open `LEDLightning.html` in any modern web browser. A storm begins animating aut
 
 | Control | Range | Effect |
 |---|---|---|
-| **Seed** | 1–99999 | Determines cloud shape, terrain profile, and bolt timing sequence. The same seed always produces the same storm. |
+| **Seed** | 1–2,147,483,647 | Determines cloud shape, terrain profile, and bolt timing sequence. The same seed always produces the same storm. |
 | **Random** | button | Picks a random seed and restarts. |
 | **Frequency** | 1–10 | Average bolt spawn rate. Higher = more frequent strikes. |
 | **Branching** | 1–10 | Branch probability and branch energy. Higher = denser Lichtenberg figures. |
@@ -52,6 +52,7 @@ Each bolt follows a lifecycle: brief full-brightness flash → sustained glow wi
 | **Warm Lightning** | Summer heat — yellow-white core, orange branches, amber clouds |
 | **Aurora Discharge** | Northern lights — mint core, green branches, teal clouds |
 | **Red Storm** | Martian/volcanic — peach core, red branches, russet clouds |
+| **Mixed** | Each bolt independently picks a random colour from the five palettes above |
 
 ---
 
@@ -59,4 +60,5 @@ Each bolt follows a lifecycle: brief full-brightness flash → sustained glow wi
 
 | Version | Description |
 |---|---|
+| **1.1** | Sidebar layout, CSS-scaled view pane, random seed on startup, seed clamped to 32-bit max, Mixed palette |
 | **1.0** | Initial release — cloud/terrain generation, recursive lightning, 5 palettes, illumination effects |

@@ -2,46 +2,227 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>LEDLightning v1.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEDLightning v1.1</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #05060f; display: flex; justify-content: center; align-items: center;
-       min-height: 100vh; font-family: monospace; color: #aab; flex-direction: column; gap: 12px; }
-canvas { display: block; image-rendering: pixelated; }
-.controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
-.controls label { font-size: 12px; color: #8899aa; }
-.controls input, .controls select, .controls button {
-  background: #111827; border: 1px solid #2a3a4a; color: #aab; padding: 4px 8px;
-  font-family: monospace; font-size: 12px; border-radius: 3px; }
-.controls button:hover { background: #1e293b; cursor: pointer; }
-.controls input[type=range] { width: 80px; }
-#info { font-size: 11px; color: #556; }
+
+:root {
+  --bg:       #05060f;
+  --panel-bg: #080911;
+  --text:     #aabbcc;
+  --accent:   #5bc8ff;
+  --border:   #1a2535;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 1.2rem;
+  font-weight: 300;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #445566;
+}
+
+header h1 span {
+  color: var(--accent);
+  text-shadow: 0 0 8px var(--accent), 0 0 20px rgba(91,200,255,0.4);
+}
+
+.container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  padding: 1rem;
+  background: var(--panel-bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.group-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #445;
+}
+
+.control-group input[type=number],
+.control-group select {
+  background: #050608;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.45rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.control-group input:focus,
+.control-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 4px rgba(91,200,255,0.25);
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-row input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+
+.val {
+  font-size: 0.8rem;
+  color: var(--accent);
+  min-width: 1.2rem;
+  text-align: right;
+  text-shadow: 0 0 5px rgba(91,200,255,0.5);
+}
+
+button {
+  background: #0a1520;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.6rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+  text-shadow: 0 0 5px rgba(91,200,255,0.4);
+  box-shadow: 0 0 5px rgba(91,200,255,0.1);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+button:hover {
+  background: #0f2030;
+  box-shadow: 0 0 10px rgba(91,200,255,0.25);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.version {
+  margin-top: auto;
+  font-size: 0.65rem;
+  color: #223;
+  padding-top: 0.5rem;
+}
+
+/* ── View pane ── */
+.view-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  transform-origin: center center;
+}
 </style>
 </head>
 <body>
 
-<canvas id="c"></canvas>
-<div class="controls">
-  <label>Seed <input type="number" id="seedIn" value="1" min="1" max="99999" style="width:60px"></label>
-  <button id="randBtn">Random</button>
-  <label>Frequency <input type="range" id="freqIn" min="1" max="10" value="5"></label>
-  <label>Branching <input type="range" id="branchIn" min="1" max="10" value="5"></label>
-  <label>Palette
-    <select id="palIn">
-      <option value="0">Electric Blue</option>
-      <option value="1">Purple Plasma</option>
-      <option value="2">Warm Lightning</option>
-      <option value="3">Aurora Discharge</option>
-      <option value="4">Red Storm</option>
-    </select>
-  </label>
+<header>
+  <h1>LED<span>Lightning</span></h1>
+</header>
+
+<div class="container">
+  <aside class="sidebar">
+
+    <div class="control-group">
+      <span class="group-label">Seed</span>
+      <input type="number" id="seedIn" min="1" max="2147483647">
+      <button id="randBtn">Random</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="control-group">
+      <span class="group-label">Frequency</span>
+      <div class="control-row">
+        <input type="range" id="freqIn" min="1" max="10" value="5">
+        <span class="val" id="freqVal">5</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <span class="group-label">Branching</span>
+      <div class="control-row">
+        <input type="range" id="branchIn" min="1" max="10" value="5">
+        <span class="val" id="branchVal">5</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="control-group">
+      <span class="group-label">Palette</span>
+      <select id="palIn">
+        <option value="0">Electric Blue</option>
+        <option value="1">Purple Plasma</option>
+        <option value="2">Warm Lightning</option>
+        <option value="3">Aurora Discharge</option>
+        <option value="4">Red Storm</option>
+        <option value="5">Mixed</option>
+      </select>
+    </div>
+
+    <div class="version">v1.1</div>
+
+  </aside>
+
+  <div class="view-pane" id="viewPane">
+    <canvas id="c"></canvas>
+  </div>
 </div>
-<div id="info"></div>
 
 <script>
 const W = 100, H = 100, CELL = 6;
 const canvas = document.getElementById('c');
-canvas.width = W * CELL; canvas.height = H * CELL;
+canvas.width  = W * CELL;
+canvas.height = H * CELL;
 const ctx = canvas.getContext('2d');
 const img = ctx.createImageData(W * CELL, H * CELL);
 const buf = img.data;
@@ -72,13 +253,13 @@ function makeRng(seed) {
   };
 }
 
-// --- Simple 1D value noise for cloud shapes ---
+// --- Simple 1D value noise ---
 function valueNoise(rng, n) {
   const vals = [];
   for (let i = 0; i < n; i++) vals.push(rng());
   return function(x) {
     const idx = ((x % n) + n) % n;
-    const i0 = Math.floor(idx), i1 = (i0 + 1) % n;
+    const i0  = Math.floor(idx), i1 = (i0 + 1) % n;
     const frac = idx - i0;
     const smooth = frac * frac * (3 - 2 * frac);
     return vals[i0] * (1 - smooth) + vals[i1] * smooth;
@@ -86,132 +267,136 @@ function valueNoise(rng, n) {
 }
 
 // --- Palettes ---
+// Index 5 is Mixed: bolts pick from indices 0-4 individually.
+// cloud/cloudHi/flash on Mixed are used for base cloud/ground rendering.
 const PALETTES = [
   { name: 'Electric Blue',
-    cloud: [50, 55, 75], cloudHi: [80, 90, 120],
-    core: [200, 230, 255], mid: [100, 160, 255], dim: [30, 60, 180],
-    flash: [160, 200, 255] },
+    cloud: [50,55,75],   cloudHi: [80,90,120],
+    core: [200,230,255], mid: [100,160,255], dim: [30,60,180],
+    flash: [160,200,255] },
   { name: 'Purple Plasma',
-    cloud: [55, 40, 70], cloudHi: [90, 60, 120],
-    core: [230, 180, 255], mid: [180, 80, 255], dim: [80, 20, 160],
-    flash: [200, 150, 255] },
+    cloud: [55,40,70],   cloudHi: [90,60,120],
+    core: [230,180,255], mid: [180,80,255],  dim: [80,20,160],
+    flash: [200,150,255] },
   { name: 'Warm Lightning',
-    cloud: [60, 50, 40], cloudHi: [100, 80, 60],
-    core: [255, 240, 200], mid: [255, 180, 80], dim: [180, 100, 20],
-    flash: [255, 220, 160] },
+    cloud: [60,50,40],   cloudHi: [100,80,60],
+    core: [255,240,200], mid: [255,180,80],  dim: [180,100,20],
+    flash: [255,220,160] },
   { name: 'Aurora Discharge',
-    cloud: [35, 60, 55], cloudHi: [50, 100, 80],
-    core: [180, 255, 220], mid: [60, 220, 140], dim: [20, 120, 80],
-    flash: [120, 255, 200] },
+    cloud: [35,60,55],   cloudHi: [50,100,80],
+    core: [180,255,220], mid: [60,220,140],  dim: [20,120,80],
+    flash: [120,255,200] },
   { name: 'Red Storm',
-    cloud: [65, 40, 40], cloudHi: [110, 55, 50],
-    core: [255, 220, 200], mid: [255, 80, 50], dim: [160, 30, 20],
-    flash: [255, 160, 130] },
+    cloud: [65,40,40],   cloudHi: [110,55,50],
+    core: [255,220,200], mid: [255,80,50],   dim: [160,30,20],
+    flash: [255,160,130] },
+  { name: 'Mixed',
+    cloud: [45,48,60],   cloudHi: [65,70,88],
+    core: null, mid: null, dim: null,
+    flash: [150,170,200] },
 ];
+const MIXED_IDX = 5;
 
-// --- Cloud layer state (regenerated per seed) ---
+// --- Scene state ---
 let cloudNoise1, cloudNoise2, cloudBase;
 const CLOUD_MIN = 4, CLOUD_MAX = 10;
 
-// --- Ground layer state ---
 let groundNoise1, groundNoise2, groundBase;
-const GROUND_TOP = 88;   // ground starts around row 88-96
-const GROUND_RANGE = 8;
+const GROUND_TOP = 88, GROUND_RANGE = 8;
 
-// --- Lightning bolt state ---
-let bolts = [];       // active bolts
-let time = 0;
-let boltRng;          // runtime rng for bolt spawning (not seeded -- random timing)
-let nextBoltTime = 0;
+let bolts = [], time = 0, boltRng, nextBoltTime = 0;
 
-// --- Generate scene from seed ---
-function generateClouds() {
-  const seed = parseInt(document.getElementById('seedIn').value) || 1;
-  const rng = makeRng(seed);
-  // Two octaves of noise for cloud bottom contour
-  cloudNoise1 = valueNoise(rng, 12);
-  cloudNoise2 = valueNoise(rng, 20);
-  // Base brightness variation per column
-  cloudBase = new Float32Array(W);
-  for (let x = 0; x < W; x++) cloudBase[x] = 0.3 + rng() * 0.4;
-  // Ground terrain noise
-  groundNoise1 = valueNoise(rng, 10);
-  groundNoise2 = valueNoise(rng, 18);
-  groundBase = new Float32Array(W);
-  for (let x = 0; x < W; x++) groundBase[x] = 0.4 + rng() * 0.3;
-  boltRng = makeRng(seed + 7777);
-  bolts = [];
-  time = 0;
-  nextBoltTime = 30 + Math.floor(boltRng() * 60);
-  document.getElementById('info').textContent =
-    `Seed: ${seed} | ${PALETTES[parseInt(document.getElementById('palIn').value) || 0].name}`;
+// --- Seed helpers ---
+const MAX_SEED = 2147483647;
+
+function getSeed() {
+  const el = document.getElementById('seedIn');
+  let v = parseInt(el.value) || 1;
+  if (v > MAX_SEED) v = MAX_SEED;
+  if (v < 1)        v = 1;
+  el.value = v;
+  return v;
 }
 
-// Ground top y at column x (animated slightly)
+// --- Generate scene from seed ---
+function generateScene() {
+  const seed = getSeed();
+  const rng  = makeRng(seed);
+
+  cloudNoise1 = valueNoise(rng, 12);
+  cloudNoise2 = valueNoise(rng, 20);
+  cloudBase   = new Float32Array(W);
+  for (let x = 0; x < W; x++) cloudBase[x] = 0.3 + rng() * 0.4;
+
+  groundNoise1 = valueNoise(rng, 10);
+  groundNoise2 = valueNoise(rng, 18);
+  groundBase   = new Float32Array(W);
+  for (let x = 0; x < W; x++) groundBase[x] = 0.4 + rng() * 0.3;
+
+  boltRng      = makeRng(seed + 7777);
+  bolts        = [];
+  time         = 0;
+  nextBoltTime = 30 + Math.floor(boltRng() * 60);
+}
+
+// --- Scene geometry ---
 function groundTop(x, t) {
   const n1 = groundNoise1((x / W) * 10 + t * 0.0005);
   const n2 = groundNoise2((x / W) * 18 - t * 0.0008) * 0.3;
   return GROUND_TOP + (n1 + n2) * GROUND_RANGE;
 }
 
-// Cloud bottom y at column x (animated)
 function cloudBottom(x, t) {
   const n1 = cloudNoise1((x / W) * 12 + t * 0.002);
   const n2 = cloudNoise2((x / W) * 20 - t * 0.003) * 0.4;
   return CLOUD_MIN + (n1 + n2) * (CLOUD_MAX - CLOUD_MIN);
 }
 
-// Spawn a lightning bolt
+// --- Spawn a bolt ---
 function spawnBolt(rng, branchStr) {
-  const sx = Math.floor(10 + rng() * (W - 20));
-  const sy = Math.floor(cloudBottom(sx, time));
-  const targetY = groundTop(sx, time);  // aim for ground
-  const segments = [];
-  const branchChance = 0.03 + branchStr * 0.09;  // 0.12 at 1, 0.21 at 2 ... 0.93 at 10
-  let hitGround = false;
-  let hitX = sx;
+  const palIdx    = parseInt(document.getElementById('palIn').value) || 0;
+  // Mixed: each bolt independently picks one of the 5 base palettes
+  const boltPal   = palIdx === MIXED_IDX
+    ? PALETTES[Math.floor(rng() * 5)]
+    : PALETTES[palIdx];
+
+  const sx        = Math.floor(10 + rng() * (W - 20));
+  const sy        = Math.floor(cloudBottom(sx, time));
+  const segments  = [];
+  const branchChance = 0.03 + branchStr * 0.09;
+  let hitGround = false, hitX = sx;
 
   function trace(x, y, angle, energy, depth) {
     if (energy < 0.05 || depth > 6) return;
-    const stepLen = 1;
-    // Main channel: enough steps to reach ground
-    // Branches: longer runs so they're visible, scaled by energy and branchStr
     const maxSteps = depth === 0 ? 200
       : Math.floor((8 + rng() * 25) * energy * (0.8 + branchStr * 0.4));
     let cx = x, cy = y;
     for (let i = 0; i < maxSteps; i++) {
-      // Check ground collision
       const gnd = groundTop(Math.floor(cx), time);
       if (cy >= gnd) {
         if (depth === 0) { hitGround = true; hitX = cx; }
         break;
       }
-      // Jag the angle
       angle += (rng() - 0.5) * 1.2;
-      // Bias downward
-      angle = angle * 0.7 + (Math.PI * 0.5) * 0.3;
-      const nx = cx + Math.cos(angle) * stepLen;
-      const ny = cy + Math.sin(angle) * stepLen;
+      angle  = angle * 0.7 + (Math.PI * 0.5) * 0.3;
+      const nx = cx + Math.cos(angle);
+      const ny = cy + Math.sin(angle);
       segments.push({ x0: cx, y0: cy, x1: nx, y1: ny, energy, depth });
       cx = nx; cy = ny;
-      // Branch?
       if (rng() < branchChance && depth < 5) {
-        const branchAngle = angle + (rng() > 0.5 ? 1 : -1) * (0.3 + rng() * 0.7);
-        // Branches inherit more energy so they're visible
-        trace(cx, cy, branchAngle, energy * (0.5 + rng() * 0.3), depth + 1);
+        const ba = angle + (rng() > 0.5 ? 1 : -1) * (0.3 + rng() * 0.7);
+        trace(cx, cy, ba, energy * (0.5 + rng() * 0.3), depth + 1);
       }
-      // Main channel decays slower so it reaches ground; branches decay moderately
       energy *= depth === 0 ? 0.995 : 0.985;
     }
   }
 
-  const startAngle = Math.PI * 0.5 + (rng() - 0.5) * 0.6;
-  trace(sx, sy, startAngle, 1.0, 0);
-
+  trace(sx, sy, Math.PI * 0.5 + (rng() - 0.5) * 0.6, 1.0, 0);
   return { segments, birth: time, life: 30 + Math.floor(rng() * 25),
-           sx, sy, hitGround, hitX };
+           sx, sy, hitGround, hitX, pal: boltPal };
 }
 
+// --- Pixel helpers ---
 function setPixel(x, y, r, g, b, a) {
   x = Math.floor(x); y = Math.floor(y);
   if (x < 0 || x >= W || y < 0 || y >= H) return;
@@ -221,7 +406,6 @@ function setPixel(x, y, r, g, b, a) {
   gridB[idx] = Math.min(255, gridB[idx] + b * a);
 }
 
-// Bresenham-ish line drawing for bolt segments
 function drawSegment(x0, y0, x1, y1, r, g, b, a) {
   const dx = x1 - x0, dy = y1 - y0;
   const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
@@ -233,126 +417,122 @@ function drawSegment(x0, y0, x1, y1, r, g, b, a) {
   }
 }
 
+// --- Render loop ---
 function renderFrame() {
-  const freq = parseInt(document.getElementById('freqIn').value) || 5;
+  const freq      = parseInt(document.getElementById('freqIn').value)   || 5;
   const branchStr = parseInt(document.getElementById('branchIn').value) / 5;
-  const palIdx = parseInt(document.getElementById('palIn').value) || 0;
-  const pal = PALETTES[palIdx];
+  const palIdx    = parseInt(document.getElementById('palIn').value)    || 0;
+  const pal       = PALETTES[palIdx];
 
   gridR.fill(0); gridG.fill(0); gridB.fill(0);
 
-  // --- Draw cloud layer ---
+  // Cloud layer
   for (let x = 0; x < W; x++) {
     const bottom = cloudBottom(x, time);
     for (let y = 0; y < Math.ceil(bottom); y++) {
-      const t = y / bottom;  // 0=top, 1=bottom of cloud
-      // Density: thicker toward bottom, with per-column variation
+      const t       = y / bottom;
       const density = (0.2 + 0.8 * t * t) * cloudBase[x];
-      // Animated shimmer
       const shimmer = 0.85 + 0.15 * Math.sin(time * 0.04 + x * 0.3 + y * 0.5);
-      const a = density * shimmer;
+      const a       = density * shimmer;
 
-      // Check if any active bolt is near this cloud point (illumination)
-      let flashBoost = 0;
+      // Flash from nearby bolts — use each bolt's own palette colour
+      let flashBoost = 0, fR = pal.flash[0], fG = pal.flash[1], fB = pal.flash[2];
       for (const bolt of bolts) {
-        const age = time - bolt.birth;
+        const age        = time - bolt.birth;
         if (age > bolt.life) continue;
         const flashPhase = age < 3 ? 1 : age < 6 ? 0.6 : 0;
-        const dx = Math.abs(x - bolt.sx);
-        if (dx < 20 && flashPhase > 0) {
-          flashBoost = Math.max(flashBoost, flashPhase * (1 - dx / 20));
+        const dist       = Math.abs(x - bolt.sx);
+        if (dist < 20 && flashPhase > 0) {
+          const boost = flashPhase * (1 - dist / 20);
+          if (boost > flashBoost) {
+            flashBoost = boost;
+            fR = bolt.pal.flash[0]; fG = bolt.pal.flash[1]; fB = bolt.pal.flash[2];
+          }
         }
       }
 
-      const cr = pal.cloud[0] + (pal.cloudHi[0] - pal.cloud[0]) * t + pal.flash[0] * flashBoost * 0.5;
-      const cg = pal.cloud[1] + (pal.cloudHi[1] - pal.cloud[1]) * t + pal.flash[1] * flashBoost * 0.5;
-      const cb = pal.cloud[2] + (pal.cloudHi[2] - pal.cloud[2]) * t + pal.flash[2] * flashBoost * 0.5;
-      setPixel(x, y, cr, cg, cb, a);
+      setPixel(x, y,
+        pal.cloud[0] + (pal.cloudHi[0] - pal.cloud[0]) * t + fR * flashBoost * 0.5,
+        pal.cloud[1] + (pal.cloudHi[1] - pal.cloud[1]) * t + fG * flashBoost * 0.5,
+        pal.cloud[2] + (pal.cloudHi[2] - pal.cloud[2]) * t + fB * flashBoost * 0.5,
+        a);
     }
   }
 
-  // --- Draw ground layer ---
+  // Ground layer
   for (let x = 0; x < W; x++) {
     const top = groundTop(x, time);
     for (let y = Math.floor(top); y < H; y++) {
-      const depth = (y - top) / (H - top);  // 0 at surface, 1 at bottom
-      const base = groundBase[x];
-      // Grass colour darkens with depth, slight variation
+      const depth   = (y - top) / (H - top);
       const shimmer = 0.9 + 0.1 * Math.sin(time * 0.01 + x * 0.4 + y * 0.3);
-      const a = (0.3 + 0.5 * (1 - depth)) * base * shimmer;
-      // Green field: darker at depth, brighter at tips
+      const a       = (0.3 + 0.5 * (1 - depth)) * groundBase[x] * shimmer;
       let gr = 12 + 20 * (1 - depth);
       let gg = 50 + 80 * (1 - depth);
       let gb = 10 + 15 * (1 - depth);
 
-      // Flash from ground strikes
-      let flashBoost = 0;
+      let flashBoost = 0, fR = pal.flash[0], fG = pal.flash[1], fB = pal.flash[2];
       for (const bolt of bolts) {
         if (!bolt.hitGround) continue;
-        const age = time - bolt.birth;
+        const age        = time - bolt.birth;
         if (age > bolt.life) continue;
         const flashPhase = age < 3 ? 1 : age < 6 ? 0.5 : 0;
-        const dx = Math.abs(x - bolt.hitX);
-        if (dx < 15 && flashPhase > 0) {
-          flashBoost = Math.max(flashBoost, flashPhase * (1 - dx / 15) * (1 - depth));
+        const dist       = Math.abs(x - bolt.hitX);
+        if (dist < 15 && flashPhase > 0) {
+          const boost = flashPhase * (1 - dist / 15) * (1 - depth);
+          if (boost > flashBoost) {
+            flashBoost = boost;
+            fR = bolt.pal.flash[0]; fG = bolt.pal.flash[1]; fB = bolt.pal.flash[2];
+          }
         }
       }
-      gr += pal.flash[0] * flashBoost * 0.3;
-      gg += pal.flash[1] * flashBoost * 0.3;
-      gb += pal.flash[2] * flashBoost * 0.3;
-
-      setPixel(x, y, gr, gg, gb, a);
+      setPixel(x, y,
+        gr + fR * flashBoost * 0.3,
+        gg + fG * flashBoost * 0.3,
+        gb + fB * flashBoost * 0.3,
+        a);
     }
   }
 
-  // --- Maybe spawn new bolt ---
+  // Spawn bolt
   if (time >= nextBoltTime) {
     bolts.push(spawnBolt(boltRng, branchStr));
-    // Frequency: lower value = longer wait
     const wait = 20 + Math.floor(boltRng() * (200 / freq));
     nextBoltTime = time + wait;
-    // Occasional double-strike
     if (boltRng() < 0.25) {
       nextBoltTime = time + 3 + Math.floor(boltRng() * 8);
     }
   }
 
-  // --- Draw lightning bolts ---
+  // Draw bolts
   for (let bi = bolts.length - 1; bi >= 0; bi--) {
     const bolt = bolts[bi];
-    const age = time - bolt.birth;
+    const age  = time - bolt.birth;
     if (age > bolt.life) { bolts.splice(bi, 1); continue; }
 
-    // Fade envelope: bright flash, then decay
     let envelope;
-    if (age < 2) envelope = 1.0;           // initial flash
-    else if (age < 5) envelope = 0.85;     // sustained bright
-    else if (age < 8) envelope = 0.5;      // quick drop
-    else envelope = 0.5 * (1 - (age - 8) / (bolt.life - 8));  // slow fade
-
+    if      (age < 2) envelope = 1.0;
+    else if (age < 5) envelope = 0.85;
+    else if (age < 8) envelope = 0.5;
+    else              envelope = 0.5 * (1 - (age - 8) / (bolt.life - 8));
     if (envelope <= 0) continue;
 
-    // Flicker during sustained phase
-    const flicker = age < 8 ? 0.9 + 0.1 * Math.sin(age * 3.5) : 1;
-    envelope *= flicker;
+    envelope *= age < 8 ? 0.9 + 0.1 * Math.sin(age * 3.5) : 1;
 
+    const bp = bolt.pal;
     for (const seg of bolt.segments) {
-      // Core vs branch brightness
       const depthFade = seg.depth === 0 ? 1.0 : Math.max(0.15, 0.7 - seg.depth * 0.15);
       const e = seg.energy * depthFade;
       const a = envelope * e;
       if (a < 0.01) continue;
 
-      // Color: interpolate core->mid->dim by energy and depth
-      const coreF = Math.max(0, e - 0.5) * 2;   // 1 at full energy, 0 at 0.5
-      const midF = Math.min(e, 0.5) * 2;          // rises to 1 at 0.5
-      const r = pal.core[0] * coreF + pal.mid[0] * midF * (1 - coreF) + pal.dim[0] * (1 - midF) * (1 - coreF);
-      const g = pal.core[1] * coreF + pal.mid[1] * midF * (1 - coreF) + pal.dim[1] * (1 - midF) * (1 - coreF);
-      const b = pal.core[2] * coreF + pal.mid[2] * midF * (1 - coreF) + pal.dim[2] * (1 - midF) * (1 - coreF);
+      const coreF = Math.max(0, e - 0.5) * 2;
+      const midF  = Math.min(e, 0.5) * 2;
+      const dimF  = (1 - midF) * (1 - coreF);
+      const r = bp.core[0] * coreF + bp.mid[0] * midF * (1 - coreF) + bp.dim[0] * dimF;
+      const g = bp.core[1] * coreF + bp.mid[1] * midF * (1 - coreF) + bp.dim[1] * dimF;
+      const b = bp.core[2] * coreF + bp.mid[2] * midF * (1 - coreF) + bp.dim[2] * dimF;
 
       drawSegment(seg.x0, seg.y0, seg.x1, seg.y1, r, g, b, a);
-
-      // Glow: adjacent pixels at reduced brightness for core segments
       if (seg.depth < 2 && a > 0.2) {
         const ga = a * 0.25;
         drawSegment(seg.x0 - 1, seg.y0, seg.x1 - 1, seg.y1, r, g, b, ga);
@@ -361,7 +541,7 @@ function renderFrame() {
     }
   }
 
-  // --- Render grid to canvas with LED kernel ---
+  // Render to canvas via LED kernel
   const stride = W * CELL * 4;
   buf.fill(0);
   for (let y = 0; y < H; y++) {
@@ -371,7 +551,7 @@ function renderFrame() {
       const ox = x * CELL, oy = y * CELL;
       for (let py = 0; py < CELL; py++) {
         for (let px = 0; px < CELL; px++) {
-          const k = kern[py * CELL + px];
+          const k    = kern[py * CELL + px];
           const bIdx = (oy + py) * stride + (ox + px) * 4;
           buf[bIdx]     = Math.min(255, r * k);
           buf[bIdx + 1] = Math.min(255, g * k);
@@ -387,16 +567,38 @@ function renderFrame() {
   requestAnimationFrame(renderFrame);
 }
 
+// --- Canvas scaling (fit to view pane) ---
+const viewPane = document.getElementById('viewPane');
+function fitCanvas() {
+  const scale = Math.min(
+    viewPane.clientWidth  / (W * CELL),
+    viewPane.clientHeight / (H * CELL)
+  );
+  canvas.style.transform = `scale(${scale})`;
+}
+new ResizeObserver(fitCanvas).observe(viewPane);
+
 // --- Controls ---
-function rebuild() { generateClouds(); }
+function rebuild() { generateScene(); }
+
 document.getElementById('seedIn').addEventListener('change', rebuild);
 document.getElementById('palIn').addEventListener('change', rebuild);
+
+document.getElementById('freqIn').addEventListener('input', e => {
+  document.getElementById('freqVal').textContent = e.target.value;
+});
+document.getElementById('branchIn').addEventListener('input', e => {
+  document.getElementById('branchVal').textContent = e.target.value;
+});
+
 document.getElementById('randBtn').addEventListener('click', () => {
-  document.getElementById('seedIn').value = 1 + Math.floor(Math.random() * 99999);
+  document.getElementById('seedIn').value = 1 + Math.floor(Math.random() * MAX_SEED);
   rebuild();
 });
 
-generateClouds();
+// Startup: random seed
+document.getElementById('seedIn').value = 1 + Math.floor(Math.random() * MAX_SEED);
+generateScene();
 renderFrame();
 </script>
 </body>
