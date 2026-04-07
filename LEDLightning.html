@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEDLightning v1.2</title>
+<title>LEDLightning v1.3</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -209,7 +209,7 @@ canvas {
       </select>
     </div>
 
-    <div class="version">v1.2</div>
+    <div class="version">v1.3</div>
 
   </aside>
 
@@ -266,6 +266,19 @@ function valueNoise(rng, n) {
   };
 }
 
+// --- Silhouette shapes (rows: top→bottom, 'X'=lit, '.'=empty) ---
+// Max ~8×8 cells each. Placed on the static ground at scene generation.
+const SILHOUETTE_TYPES = [
+  { rows: ['..X..','..X..','..X..','..X..','..X..','..X..','..X..','..X..'] },          // 0: rain / placeholder -- excluded below; replaced by:
+  { rows: ['..X..', '.XXX.', 'XXXXX', '..X..', '..X..', '..X..', '..X..'] },           // 1: pine tree
+  { rows: ['.XXXX.', 'XXXXXX', 'XXXXXX', '.XXXX.', '..XX..', '..XX..', '..XX..'] },    // 2: round tree
+  { rows: ['..X..', '.XXX.', 'XXXXX', 'XXXXX', 'XXXXX'] },                              // 3: house
+  { rows: ['...X...', '..XXX..', '.XXXXX.', 'XXXXXXX', 'XXXXXXX', 'XXXXXXX'] },         // 4: barn
+  { rows: ['.XXX.', 'XXXXX', '.XXX.'] },                                                 // 5: rock
+  { rows: ['.XXX.', 'XXXXX', 'XXXXX'] },                                                 // 6: bush
+  { rows: ['XXX', '.X.', '.X.', '.X.', '.X.', '.X.', 'XXX'] },                         // 7: lamp post
+].slice(1);  // drop index 0 placeholder
+
 // --- Palettes ---
 // Index 5 is Mixed: bolts pick from indices 0-4 individually.
 // cloud/cloudHi/flash on Mixed are used for base cloud/ground rendering.
@@ -302,9 +315,14 @@ let cloudNoise1, cloudNoise2, cloudBase;
 const CLOUD_MIN = 4, CLOUD_MAX = 10;
 
 let groundNoise1, groundNoise2, groundBase;
+let groundTopStatic;  // precomputed static ground height per column
 const GROUND_TOP = 88, GROUND_RANGE = 8;
 
-let bolts = [], time = 0, boltRng, nextBoltTime = 0;
+let sceneObjects = [];  // silhouette objects placed on terrain
+let bolts        = [];
+let strikeMarks  = [];  // afterglow marks left by ground strikes
+const STRIKE_LIFE = 120;  // frames (~2 s at 60 fps)
+let time = 0, boltRng, nextBoltTime = 0;
 
 // --- Seed helpers ---
 const MAX_SEED = 2147483647;
@@ -333,6 +351,34 @@ function generateScene() {
   groundBase   = new Float32Array(W);
   for (let x = 0; x < W; x++) groundBase[x] = 0.4 + rng() * 0.3;
 
+  // Precompute static ground height per column (no animation)
+  groundTopStatic = new Float32Array(W);
+  for (let x = 0; x < W; x++) {
+    const n1 = groundNoise1((x / W) * 10);
+    const n2 = groundNoise2((x / W) * 18) * 0.3;
+    groundTopStatic[x] = GROUND_TOP + (n1 + n2) * GROUND_RANGE;
+  }
+
+  // Place silhouette objects on the terrain using a separate RNG stream
+  const objRng = makeRng(seed + 4567);
+  sceneObjects  = [];
+  const numObj  = 3 + Math.floor(objRng() * 5);  // 3–7 objects per scene
+  const used    = [];  // reserved x-ranges to prevent overlap
+  for (let attempt = 0; sceneObjects.length < numObj && attempt < numObj * 8; attempt++) {
+    const type  = SILHOUETTE_TYPES[Math.floor(objRng() * SILHOUETTE_TYPES.length)];
+    const w     = type.rows[0].length;
+    const h     = type.rows.length;
+    const cx    = 8 + Math.floor(objRng() * (W - 16));
+    const baseX = cx - Math.floor(w / 2);
+    const baseY = Math.round(groundTopStatic[Math.min(W - 1, cx)]) - h;
+    if (baseX < 1 || baseX + w > W - 1 || baseY < 2) continue;
+    const lo = baseX - 2, hi = baseX + w + 2;
+    if (used.some(r => lo < r.hi && hi > r.lo)) continue;
+    used.push({ lo, hi });
+    sceneObjects.push({ type, baseX, baseY });
+  }
+
+  strikeMarks  = [];
   boltRng      = makeRng(seed + 7777);
   bolts        = [];
   time         = 0;
@@ -340,10 +386,8 @@ function generateScene() {
 }
 
 // --- Scene geometry ---
-function groundTop(x, t) {
-  const n1 = groundNoise1((x / W) * 10 + t * 0.0005);
-  const n2 = groundNoise2((x / W) * 18 - t * 0.0008) * 0.3;
-  return GROUND_TOP + (n1 + n2) * GROUND_RANGE;
+function groundTop(x) {
+  return groundTopStatic[Math.min(W - 1, Math.max(0, Math.floor(x)))];
 }
 
 function cloudBottom(x, t) {
@@ -355,7 +399,6 @@ function cloudBottom(x, t) {
 // --- Spawn a bolt ---
 function spawnBolt(rng, branchStr) {
   const palIdx    = parseInt(document.getElementById('palIn').value) || 0;
-  // Mixed: each bolt independently picks one of the 5 base palettes
   const boltPal   = palIdx === MIXED_IDX
     ? PALETTES[Math.floor(rng() * 5)]
     : PALETTES[palIdx];
@@ -372,7 +415,7 @@ function spawnBolt(rng, branchStr) {
       : Math.floor((8 + rng() * 25) * energy * (0.8 + branchStr * 0.4));
     let cx = x, cy = y;
     for (let i = 0; i < maxSteps; i++) {
-      const gnd = groundTop(Math.floor(cx), time);
+      const gnd = groundTop(cx);  // static — no time argument
       if (cy >= gnd) {
         if (depth === 0) { hitGround = true; hitX = cx; }
         break;
@@ -417,6 +460,13 @@ function drawSegment(x0, y0, x1, y1, r, g, b, a) {
   }
 }
 
+// --- Bolt flash phase (fades over full bolt lifetime) ---
+function boltFlashPhase(age, life) {
+  if (age < 3) return 1.0;
+  if (age < 6) return 0.8;
+  return Math.max(0, 0.5 * (1 - (age - 6) / Math.max(1, life - 6)));
+}
+
 // --- Render loop ---
 function renderFrame() {
   const freq      = parseInt(document.getElementById('freqIn').value)   || 5;
@@ -426,7 +476,7 @@ function renderFrame() {
 
   gridR.fill(0); gridG.fill(0); gridB.fill(0);
 
-  // Cloud layer
+  // ── Cloud layer ──
   for (let x = 0; x < W; x++) {
     const bottom = cloudBottom(x, time);
     for (let y = 0; y < Math.ceil(bottom); y++) {
@@ -435,7 +485,6 @@ function renderFrame() {
       const shimmer = 0.85 + 0.15 * Math.sin(time * 0.04 + x * 0.3 + y * 0.5);
       const a       = density * shimmer;
 
-      // Flash from nearby bolts — use each bolt's own palette colour
       let flashBoost = 0, fR = pal.flash[0], fG = pal.flash[1], fB = pal.flash[2];
       for (const bolt of bolts) {
         const age        = time - bolt.birth;
@@ -459,41 +508,110 @@ function renderFrame() {
     }
   }
 
-  // Ground layer
+  // ── Ground layer (static geometry, no shimmer) ──
   for (let x = 0; x < W; x++) {
-    const top = groundTop(x, time);
+    const top = groundTopStatic[x];
     for (let y = Math.floor(top); y < H; y++) {
-      const depth   = (y - top) / (H - top);
-      const shimmer = 0.9 + 0.1 * Math.sin(time * 0.01 + x * 0.4 + y * 0.3);
-      const a       = (0.3 + 0.5 * (1 - depth)) * groundBase[x] * shimmer;
+      const depth = (y - top) / (H - top);
+      const a     = (0.3 + 0.5 * (1 - depth)) * groundBase[x];
       let gr = 12 + 20 * (1 - depth);
       let gg = 50 + 80 * (1 - depth);
       let gb = 10 + 15 * (1 - depth);
 
-      let flashBoost = 0, fR = pal.flash[0], fG = pal.flash[1], fB = pal.flash[2];
+      // Flash from active bolts (fades over full bolt lifetime)
+      let flashBoost = 0, fR = 0, fG = 0, fB = 0;
       for (const bolt of bolts) {
         if (!bolt.hitGround) continue;
-        const age        = time - bolt.birth;
+        const age   = time - bolt.birth;
         if (age > bolt.life) continue;
-        const flashPhase = age < 3 ? 1 : age < 6 ? 0.5 : 0;
-        const dist       = Math.abs(x - bolt.hitX);
-        if (dist < 15 && flashPhase > 0) {
-          const boost = flashPhase * (1 - dist / 15) * (1 - depth);
+        const phase = boltFlashPhase(age, bolt.life);
+        const dist  = Math.abs(x - bolt.hitX);
+        if (dist < 15 && phase > 0) {
+          const boost = phase * (1 - dist / 15) * (1 - depth);
           if (boost > flashBoost) {
             flashBoost = boost;
             fR = bolt.pal.flash[0]; fG = bolt.pal.flash[1]; fB = bolt.pal.flash[2];
           }
         }
       }
+
+      // Afterglow from expired strike marks
+      for (const mark of strikeMarks) {
+        const mAge     = time - mark.birth;
+        if (mAge >= STRIKE_LIFE) continue;
+        const intensity = Math.pow(1 - mAge / STRIKE_LIFE, 2) * 0.45;
+        const dist      = Math.abs(x - mark.x);
+        if (dist < 10 && intensity > 0) {
+          const boost = intensity * (1 - dist / 10) * (1 - depth * 0.5);
+          if (boost > flashBoost) {
+            flashBoost = boost;
+            fR = mark.pal.flash[0]; fG = mark.pal.flash[1]; fB = mark.pal.flash[2];
+          }
+        }
+      }
+
       setPixel(x, y,
-        gr + fR * flashBoost * 0.3,
-        gg + fG * flashBoost * 0.3,
-        gb + fB * flashBoost * 0.3,
+        gr + fR * flashBoost * 0.35,
+        gg + fG * flashBoost * 0.35,
+        gb + fB * flashBoost * 0.35,
         a);
     }
   }
 
-  // Spawn bolt
+  // ── Silhouette objects (override ground/sky pixels with dark shapes) ──
+  for (const obj of sceneObjects) {
+    const { type, baseX, baseY } = obj;
+    for (let row = 0; row < type.rows.length; row++) {
+      const py  = baseY + row;
+      if (py < 0 || py >= H) continue;
+      const rowStr = type.rows[row];
+      for (let col = 0; col < rowStr.length; col++) {
+        if (rowStr[col] !== 'X') continue;
+        const px = baseX + col;
+        if (px < 0 || px >= W) continue;
+
+        // Very dark ambient base (barely visible silhouette in darkness)
+        let sr = 5, sg = 8, sb = 14;
+
+        // Illuminate from active bolts (whole scene flash)
+        for (const bolt of bolts) {
+          const age   = time - bolt.birth;
+          if (age > bolt.life) continue;
+          const phase = boltFlashPhase(age, bolt.life);
+          if (phase === 0) continue;
+          const dist = Math.abs(px - bolt.sx);
+          if (dist < 30) {
+            const boost = phase * (1 - dist / 30) * 0.7;
+            sr = Math.min(255, sr + bolt.pal.flash[0] * boost);
+            sg = Math.min(255, sg + bolt.pal.flash[1] * boost);
+            sb = Math.min(255, sb + bolt.pal.flash[2] * boost);
+          }
+        }
+
+        // Afterglow from strike marks
+        for (const mark of strikeMarks) {
+          const mAge     = time - mark.birth;
+          if (mAge >= STRIKE_LIFE) continue;
+          const intensity = Math.pow(1 - mAge / STRIKE_LIFE, 2) * 0.3;
+          const dist      = Math.abs(px - mark.x);
+          if (dist < 15 && intensity > 0) {
+            const boost = intensity * (1 - dist / 15);
+            sr = Math.min(255, sr + mark.pal.flash[0] * boost * 0.5);
+            sg = Math.min(255, sg + mark.pal.flash[1] * boost * 0.5);
+            sb = Math.min(255, sb + mark.pal.flash[2] * boost * 0.5);
+          }
+        }
+
+        // Direct write — silhouette overrides whatever ground/sky rendered here
+        const idx = py * W + px;
+        gridR[idx] = sr;
+        gridG[idx] = sg;
+        gridB[idx] = sb;
+      }
+    }
+  }
+
+  // ── Spawn bolt ──
   if (time >= nextBoltTime) {
     bolts.push(spawnBolt(boltRng, branchStr));
     const wait = 20 + Math.floor(boltRng() * (200 / freq));
@@ -503,11 +621,16 @@ function renderFrame() {
     }
   }
 
-  // Draw bolts
+  // ── Draw bolts ──
   for (let bi = bolts.length - 1; bi >= 0; bi--) {
     const bolt = bolts[bi];
     const age  = time - bolt.birth;
-    if (age > bolt.life) { bolts.splice(bi, 1); continue; }
+    if (age > bolt.life) {
+      // Leave a strike mark afterglow where the bolt hit
+      if (bolt.hitGround) strikeMarks.push({ x: bolt.hitX, pal: bolt.pal, birth: time });
+      bolts.splice(bi, 1);
+      continue;
+    }
 
     let envelope;
     if      (age < 2) envelope = 1.0;
@@ -534,10 +657,9 @@ function renderFrame() {
 
       drawSegment(seg.x0, seg.y0, seg.x1, seg.y1, r, g, b, a);
       if (a > 0.15) {
-        // Width varies per bolt (0–1). Depth-1 branches get half the radius; deeper get none.
-        const maxGlow = seg.depth === 0 ? bolt.width
-                      : seg.depth === 1 ? bolt.width * 0.5
-                      : 0;
+        const maxGlow    = seg.depth === 0 ? bolt.width
+                         : seg.depth === 1 ? bolt.width * 0.5
+                         : 0;
         const glowRadius = Math.min(3, Math.floor(maxGlow * 4));
         for (let off = 1; off <= glowRadius; off++) {
           const ga = a * 0.3 * Math.pow(0.55, off - 1);
@@ -548,7 +670,7 @@ function renderFrame() {
     }
   }
 
-  // Render to canvas via LED kernel
+  // ── Render to canvas via LED kernel ──
   const stride = W * CELL * 4;
   buf.fill(0);
   for (let y = 0; y < H; y++) {
@@ -569,6 +691,10 @@ function renderFrame() {
     }
   }
   ctx.putImageData(img, 0, 0);
+
+  // Expire old strike marks
+  if (strikeMarks.length > 0)
+    strikeMarks = strikeMarks.filter(m => (time - m.birth) < STRIKE_LIFE);
 
   time++;
   requestAnimationFrame(renderFrame);

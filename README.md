@@ -1,5 +1,5 @@
 # LEDLightning — Documentation
-**Version 1.2**
+**Version 1.3**
 
 LEDLightning is a single-file, self-contained HTML application that simulates a procedural thunderstorm rendered as a glowing LED dot-matrix display. Storms are deterministic — any storm can be exactly reproduced from its seed and settings. No server, no build step, no dependencies, no installation required.
 
@@ -60,6 +60,7 @@ Each bolt follows a lifecycle: brief full-brightness flash → sustained glow wi
 
 | Version | Description |
 |---|---|
+| **1.3** | Static ground geometry, silhouette objects (pine, round tree, house, barn, rock, bush, lamp post), strike afterglow fades over ~2 s |
 | **1.2** | Variable bolt width — each bolt gets a random thickness (thin to wide), branches taper by depth |
 | **1.1** | Sidebar layout, CSS-scaled view pane, random seed on startup, seed clamped to 32-bit max, Mixed palette |
 | **1.0** | Initial release — cloud/terrain generation, recursive lightning, 5 palettes, illumination effects |
