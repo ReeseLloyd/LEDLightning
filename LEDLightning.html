@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEDLightning v1.1</title>
+<title>LEDLightning v1.2</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -209,7 +209,7 @@ canvas {
       </select>
     </div>
 
-    <div class="version">v1.1</div>
+    <div class="version">v1.2</div>
 
   </aside>
 
@@ -393,7 +393,7 @@ function spawnBolt(rng, branchStr) {
 
   trace(sx, sy, Math.PI * 0.5 + (rng() - 0.5) * 0.6, 1.0, 0);
   return { segments, birth: time, life: 30 + Math.floor(rng() * 25),
-           sx, sy, hitGround, hitX, pal: boltPal };
+           sx, sy, hitGround, hitX, pal: boltPal, width: rng() };
 }
 
 // --- Pixel helpers ---
@@ -533,10 +533,17 @@ function renderFrame() {
       const b = bp.core[2] * coreF + bp.mid[2] * midF * (1 - coreF) + bp.dim[2] * dimF;
 
       drawSegment(seg.x0, seg.y0, seg.x1, seg.y1, r, g, b, a);
-      if (seg.depth < 2 && a > 0.2) {
-        const ga = a * 0.25;
-        drawSegment(seg.x0 - 1, seg.y0, seg.x1 - 1, seg.y1, r, g, b, ga);
-        drawSegment(seg.x0 + 1, seg.y0, seg.x1 + 1, seg.y1, r, g, b, ga);
+      if (a > 0.15) {
+        // Width varies per bolt (0–1). Depth-1 branches get half the radius; deeper get none.
+        const maxGlow = seg.depth === 0 ? bolt.width
+                      : seg.depth === 1 ? bolt.width * 0.5
+                      : 0;
+        const glowRadius = Math.min(3, Math.floor(maxGlow * 4));
+        for (let off = 1; off <= glowRadius; off++) {
+          const ga = a * 0.3 * Math.pow(0.55, off - 1);
+          drawSegment(seg.x0 - off, seg.y0, seg.x1 - off, seg.y1, r, g, b, ga);
+          drawSegment(seg.x0 + off, seg.y0, seg.x1 + off, seg.y1, r, g, b, ga);
+        }
       }
     }
   }
